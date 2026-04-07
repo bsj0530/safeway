@@ -5,8 +5,6 @@ import useVoiceGuide from "../hooks/useVoiceGuide";
 import type { PlaceItem } from "../types/place";
 import type { RouteItem } from "../types/route";
 import {
-  buildAbsoluteDangerPoints,
-  buildAbsolutePath,
   getDistanceMeters,
   getNearestPathIndex,
   getRemainingDistance,
@@ -41,28 +39,14 @@ export default function NavigationPage() {
     useVoiceGuide();
 
   const absolutePath = useMemo(() => {
-    if (!startPlace || !endPlace || !selectedRoute) return [];
-
-    return buildAbsolutePath(
-      Number(startPlace.y),
-      Number(startPlace.x),
-      Number(endPlace.y),
-      Number(endPlace.x),
-      selectedRoute,
-    );
-  }, [startPlace, endPlace, selectedRoute]);
+    if (!selectedRoute) return [];
+    return selectedRoute.relativePath;
+  }, [selectedRoute]);
 
   const absoluteDangerPoints = useMemo(() => {
-    if (!startPlace || !endPlace || !selectedRoute) return [];
-
-    return buildAbsoluteDangerPoints(
-      Number(startPlace.y),
-      Number(startPlace.x),
-      Number(endPlace.y),
-      Number(endPlace.x),
-      selectedRoute,
-    );
-  }, [startPlace, endPlace, selectedRoute]);
+    if (!selectedRoute) return [];
+    return selectedRoute.dangerPoints;
+  }, [selectedRoute]);
 
   useEffect(() => {
     if (!navigator.geolocation) {
@@ -184,20 +168,7 @@ export default function NavigationPage() {
   }, [currentPosition, absolutePath, arrived, speak, resetLastMessage]);
 
   if (!startPlace || !endPlace || !selectedRoute) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50 p-6">
-        <div className="rounded-2xl bg-white p-6 text-center shadow-sm">
-          <p className="text-slate-700">안내할 경로 정보가 없습니다.</p>
-          <button
-            type="button"
-            onClick={() => navigate("/")}
-            className="mt-4 rounded-xl bg-emerald-600 px-4 py-2 text-white"
-          >
-            홈으로 이동
-          </button>
-        </div>
-      </div>
-    );
+    return <div>경로 정보 없음</div>;
   }
 
   const currentIndex = currentPosition
