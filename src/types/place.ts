@@ -6,3 +6,7 @@ export interface PlaceItem {
   x: string;
   y: string;
 }
+
+export interface FavoritePlace extends PlaceItem {
+  nickname?: string;
+}

@@ -25,6 +25,14 @@ function getDistanceMeters(
   return R * c;
 }
 
+function formatDistance(distance: number) {
+  if (distance < 1000) {
+    return `${Math.round(distance)}m`;
+  }
+
+  return `${(distance / 1000).toFixed(1)}km`;
+}
+
 const MAX_WALKING_DISTANCE_METERS = 3000;
 
 export default function HomePage() {
@@ -93,9 +101,9 @@ export default function HomePage() {
 
     if (distance > MAX_WALKING_DISTANCE_METERS) {
       setDistanceWarning(
-        `도보 기준으로 다소 먼 거리입니다. 약 ${Math.round(
+        `도보 기준으로 다소 먼 거리예요. 현재 위치에서 약 ${formatDistance(
           distance,
-        )}m 떨어져 있어요.`,
+        )} 떨어져 있어요.`,
       );
     } else {
       setDistanceWarning("");
@@ -132,6 +140,19 @@ export default function HomePage() {
     });
   };
 
+  const isSubmitDisabled =
+    !currentPlace || !endPlace || !!locationError || isGettingLocation;
+
+  const endDistance =
+    currentPlace && endPlace
+      ? getDistanceMeters(
+          Number(currentPlace.y),
+          Number(currentPlace.x),
+          Number(endPlace.y),
+          Number(endPlace.x),
+        )
+      : null;
+
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-slate-50 px-6">
       <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-sm">
@@ -158,6 +179,7 @@ export default function HomePage() {
           <div className="space-y-4">
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <p className="text-sm font-medium text-slate-700">출발지</p>
+
               {isGettingLocation ? (
                 <p className="mt-1 text-sm text-slate-500">
                   현재 위치를 불러오는 중...
@@ -180,9 +202,21 @@ export default function HomePage() {
               label="도착지"
               placeholder="목적지를 입력하세요"
               value={endKeyword}
-              onChangeValue={setEndKeyword}
+              onChangeValue={(nextValue) => {
+                setEndKeyword(nextValue);
+
+                if (
+                  endPlace &&
+                  nextValue.trim() !== endPlace.placeName.trim()
+                ) {
+                  setEndPlace(null);
+                }
+              }}
               selectedPlace={endPlace}
-              onSelectPlace={setEndPlace}
+              onSelectPlace={(place) => {
+                setEndPlace(place);
+                setEndKeyword(place.placeName);
+              }}
               currentLocation={
                 currentPlace
                   ? {
@@ -193,6 +227,28 @@ export default function HomePage() {
               }
             />
 
+            {endPlace && (
+              <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-medium text-emerald-800">
+                    선택한 목적지
+                  </p>
+                  {endDistance !== null && (
+                    <span className="rounded-full bg-white px-2 py-1 text-xs font-medium text-emerald-700">
+                      {formatDistance(endDistance)}
+                    </span>
+                  )}
+                </div>
+
+                <p className="mt-2 text-sm font-semibold text-slate-800">
+                  {endPlace.placeName}
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  {endPlace.roadAddressName || endPlace.addressName}
+                </p>
+              </div>
+            )}
+
             {distanceWarning && (
               <div className="rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-700">
                 {distanceWarning}
@@ -202,8 +258,8 @@ export default function HomePage() {
             <button
               type="button"
               onClick={handleSubmit}
-              disabled={!currentPlace || !endPlace || !!locationError}
-              className="w-full rounded-xl bg-emerald-600 px-6 py-3 font-medium text-white disabled:bg-slate-300"
+              disabled={isSubmitDisabled}
+              className="w-full rounded-xl bg-emerald-600 px-6 py-3 font-medium text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300"
             >
               안전 경로 찾기
             </button>
