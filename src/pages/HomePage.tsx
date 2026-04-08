@@ -35,6 +35,24 @@ function formatDistance(distance: number) {
 
 const MAX_WALKING_DISTANCE_METERS = 3000;
 
+export interface RouteOptions {
+  nightTravel: boolean;
+  avoidStairs: boolean;
+  avoidDarkRoad: boolean;
+  avoidCrowdedArea: boolean;
+  preferMainRoad: boolean;
+  wheelchairMode: boolean;
+}
+
+const DEFAULT_ROUTE_OPTIONS: RouteOptions = {
+  nightTravel: false,
+  avoidStairs: false,
+  avoidDarkRoad: false,
+  avoidCrowdedArea: false,
+  preferMainRoad: false,
+  wheelchairMode: false,
+};
+
 export default function HomePage() {
   const navigate = useNavigate();
   const kakaoLoaded = useKakaoLoader();
@@ -47,6 +65,7 @@ export default function HomePage() {
   const [isGettingLocation, setIsGettingLocation] = useState(true);
 
   const [distanceWarning, setDistanceWarning] = useState("");
+  const [options, setOptions] = useState<RouteOptions>(DEFAULT_ROUTE_OPTIONS);
 
   useEffect(() => {
     if (!navigator.geolocation) {
@@ -110,6 +129,13 @@ export default function HomePage() {
     }
   }, [currentPlace, endPlace]);
 
+  const toggleOption = (key: keyof RouteOptions) => {
+    setOptions((prev) => ({
+      ...prev,
+      [key]: !prev[key],
+    }));
+  };
+
   const handleLogout = () => {
     localStorage.removeItem("safeway-user");
     navigate("/");
@@ -136,6 +162,7 @@ export default function HomePage() {
       state: {
         startPlace: currentPlace,
         endPlace,
+        options,
       },
     });
   };
@@ -152,6 +179,15 @@ export default function HomePage() {
           Number(endPlace.x),
         )
       : null;
+
+  const optionItems: Array<{ key: keyof RouteOptions; label: string }> = [
+    { key: "nightTravel", label: "야간 이동" },
+    { key: "avoidStairs", label: "계단 회피" },
+    { key: "avoidDarkRoad", label: "어두운 길 회피" },
+    { key: "avoidCrowdedArea", label: "혼잡 회피" },
+    { key: "preferMainRoad", label: "큰길 우선" },
+    { key: "wheelchairMode", label: "휠체어 모드" },
+  ];
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-slate-50 px-6">
@@ -226,6 +262,33 @@ export default function HomePage() {
                   : null
               }
             />
+
+            <div className="rounded-2xl border border-slate-200 p-4">
+              <p className="mb-3 text-sm font-semibold text-slate-700">
+                안전 옵션
+              </p>
+
+              <div className="grid grid-cols-2 gap-3">
+                {optionItems.map((item) => {
+                  const active = options[item.key];
+
+                  return (
+                    <button
+                      key={item.key}
+                      type="button"
+                      onClick={() => toggleOption(item.key)}
+                      className={`rounded-xl border px-3 py-2 text-sm font-medium transition ${
+                        active
+                          ? "border-emerald-500 bg-emerald-50 text-emerald-700"
+                          : "border-slate-200 bg-white text-slate-600"
+                      }`}
+                    >
+                      {item.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
 
             {endPlace && (
               <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3">

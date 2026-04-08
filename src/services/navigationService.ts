@@ -1,9 +1,11 @@
 import type { PlaceItem } from "../types/place";
 import type { RouteItem, RoutePoint, RouteType } from "../types/route";
+import type { RouteOptions } from "../pages/HomePage";
 
 export interface GetRoutesParams {
   startPlace: PlaceItem;
   endPlace: PlaceItem;
+  options?: RouteOptions;
 }
 
 export interface GetRoutesResponse {
@@ -13,6 +15,52 @@ export interface GetRoutesResponse {
 export interface StartNavigationResponse {
   ok: boolean;
   route: RouteItem;
+}
+
+/**
+ * 옵션 기반 점수 보정
+ */
+function applyOptionsToRoute(
+  route: RouteItem,
+  options?: RouteOptions,
+): RouteItem {
+  if (!options) return route;
+
+  let bonus = 0;
+
+  if (options.avoidDarkRoad && route.lightingRiskLevel === "high") {
+    bonus += 8;
+  }
+
+  if (options.avoidCrowdedArea && route.crowdLevel === "high") {
+    bonus += 6;
+  }
+
+  if (options.avoidStairs && route.slopeRiskLevel === "high") {
+    bonus += 6;
+  }
+
+  if (options.preferMainRoad && route.type === "safe") {
+    bonus += 5;
+  }
+
+  if (options.wheelchairMode && route.slopeRiskLevel !== "low") {
+    bonus += 10;
+  }
+
+  if (options.nightTravel && route.lightingRiskLevel === "low") {
+    bonus += 5;
+  }
+
+  const newScore = Math.min(100, route.finalSafetyScore + bonus);
+
+  return {
+    ...route,
+    finalSafetyScore: newScore,
+    realtimeSummary:
+      route.realtimeSummary +
+      (bonus > 0 ? " (선택한 안전 옵션이 반영되었습니다)" : ""),
+  };
 }
 
 function createRoutePointsByType(
@@ -28,14 +76,8 @@ function createRoutePointsByType(
   if (type === "fast") {
     return [
       { lat: startLat, lng: startLng },
-      {
-        lat: startLat + latGap * 0.35 + 0.0002,
-        lng: startLng + lngGap * 0.35 + 0.0004,
-      },
-      {
-        lat: startLat + latGap * 0.7 + 0.0001,
-        lng: startLng + lngGap * 0.7 + 0.0002,
-      },
+      { lat: startLat + latGap * 0.35, lng: startLng + lngGap * 0.35 },
+      { lat: startLat + latGap * 0.7, lng: startLng + lngGap * 0.7 },
       { lat: endLat, lng: endLng },
     ];
   }
@@ -43,40 +85,18 @@ function createRoutePointsByType(
   if (type === "balanced") {
     return [
       { lat: startLat, lng: startLng },
-      {
-        lat: startLat + latGap * 0.2 + 0.0006,
-        lng: startLng + lngGap * 0.2 + 0.0003,
-      },
-      {
-        lat: startLat + latGap * 0.5 + 0.0009,
-        lng: startLng + lngGap * 0.5 + 0.0008,
-      },
-      {
-        lat: startLat + latGap * 0.75 + 0.0005,
-        lng: startLng + lngGap * 0.75 + 0.001,
-      },
+      { lat: startLat + latGap * 0.2, lng: startLng + lngGap * 0.2 },
+      { lat: startLat + latGap * 0.5, lng: startLng + lngGap * 0.5 },
+      { lat: startLat + latGap * 0.75, lng: startLng + lngGap * 0.75 },
       { lat: endLat, lng: endLng },
     ];
   }
 
   return [
     { lat: startLat, lng: startLng },
-    {
-      lat: startLat + latGap * 0.15 + 0.001,
-      lng: startLng + lngGap * 0.15 + 0.0002,
-    },
-    {
-      lat: startLat + latGap * 0.35 + 0.0013,
-      lng: startLng + lngGap * 0.35 + 0.0005,
-    },
-    {
-      lat: startLat + latGap * 0.6 + 0.001,
-      lng: startLng + lngGap * 0.6 + 0.0012,
-    },
-    {
-      lat: startLat + latGap * 0.82 + 0.0003,
-      lng: startLng + lngGap * 0.82 + 0.0014,
-    },
+    { lat: startLat + latGap * 0.2, lng: startLng + lngGap * 0.2 },
+    { lat: startLat + latGap * 0.4, lng: startLng + lngGap * 0.4 },
+    { lat: startLat + latGap * 0.7, lng: startLng + lngGap * 0.7 },
     { lat: endLat, lng: endLng },
   ];
 }
@@ -102,24 +122,42 @@ function estimateDistanceLabel(
 function buildRoutesFromPlaces(
   startPlace: PlaceItem,
   endPlace: PlaceItem,
+  options?: RouteOptions,
 ): RouteItem[] {
   const startLat = Number(startPlace.y);
   const startLng = Number(startPlace.x);
   const endLat = Number(endPlace.y);
   const endLng = Number(endPlace.x);
 
-  return [
+  const baseRoutes: RouteItem[] = [
     {
       id: 1,
       type: "fast",
       title: "빠른 경로",
       time: 12,
-      distance: estimateDistanceLabel(startLat, startLng, endLat, endLng, 1.02),
-      safetyScore: 58,
+      distance: estimateDistanceLabel(startLat, startLng, endLat, endLng, 1.0),
+
+      baseSafetyScore: 60,
+      realtimeRiskScore: 50,
+      finalSafetyScore: 55,
+      careTargetFitScore: 60,
+
       riskCount: 3,
-      risks: ["조도 낮음", "보도 폭 좁음", "공사 구간 인접"],
+      risks: ["조도 낮음", "혼잡"],
       color: "#ef4444",
       guideLabel: "가장 빠른 이동 경로",
+
+      crowdLevel: "high",
+      incidentCount: 4,
+      hasEvent: true,
+
+      weatherRiskLevel: "medium",
+      lightingRiskLevel: "high",
+      slopeRiskLevel: "low",
+
+      realtimeBadges: ["혼잡", "주의"],
+      realtimeSummary: "빠르지만 위험 요소가 존재합니다.",
+
       relativePath: createRoutePointsByType(
         "fast",
         startLat,
@@ -127,25 +165,36 @@ function buildRoutesFromPlaces(
         endLat,
         endLng,
       ),
-      dangerPoints: [
-        {
-          lat: startLat + (endLat - startLat) * 0.45,
-          lng: startLng + (endLng - startLng) * 0.45,
-          message: "전방 조도 낮음 구간입니다.",
-        },
-      ],
+      dangerPoints: [],
     },
     {
       id: 2,
       type: "balanced",
       title: "균형 경로",
       time: 15,
-      distance: estimateDistanceLabel(startLat, startLng, endLat, endLng, 1.12),
-      safetyScore: 76,
+      distance: estimateDistanceLabel(startLat, startLng, endLat, endLng, 1.1),
+
+      baseSafetyScore: 75,
+      realtimeRiskScore: 30,
+      finalSafetyScore: 75,
+      careTargetFitScore: 75,
+
       riskCount: 2,
-      risks: ["일부 경사 구간", "횡단보도 대기 예상"],
+      risks: ["경사"],
       color: "#f59e0b",
-      guideLabel: "시간과 안전을 함께 고려한 경로",
+      guideLabel: "균형 잡힌 경로",
+
+      crowdLevel: "medium",
+      incidentCount: 2,
+      hasEvent: false,
+
+      weatherRiskLevel: "low",
+      lightingRiskLevel: "medium",
+      slopeRiskLevel: "medium",
+
+      realtimeBadges: ["균형"],
+      realtimeSummary: "적당한 선택입니다.",
+
       relativePath: createRoutePointsByType(
         "balanced",
         startLat,
@@ -153,25 +202,36 @@ function buildRoutesFromPlaces(
         endLat,
         endLng,
       ),
-      dangerPoints: [
-        {
-          lat: startLat + (endLat - startLat) * 0.55,
-          lng: startLng + (endLng - startLng) * 0.55,
-          message: "완만한 경사 구간입니다.",
-        },
-      ],
+      dangerPoints: [],
     },
     {
       id: 3,
       type: "safe",
       title: "안전 경로",
       time: 18,
-      distance: estimateDistanceLabel(startLat, startLng, endLat, endLng, 1.25),
-      safetyScore: 91,
+      distance: estimateDistanceLabel(startLat, startLng, endLat, endLng, 1.2),
+
+      baseSafetyScore: 90,
+      realtimeRiskScore: 15,
+      finalSafetyScore: 90,
+      careTargetFitScore: 95,
+
       riskCount: 1,
-      risks: ["야간 주의 구간 1곳"],
+      risks: ["야간 주의"],
       color: "#16a34a",
-      guideLabel: "위험 구간을 최소화한 추천 경로",
+      guideLabel: "가장 안전한 경로",
+
+      crowdLevel: "low",
+      incidentCount: 1,
+      hasEvent: false,
+
+      weatherRiskLevel: "low",
+      lightingRiskLevel: "medium",
+      slopeRiskLevel: "low",
+
+      realtimeBadges: ["추천"],
+      realtimeSummary: "가장 안전한 경로입니다.",
+
       relativePath: createRoutePointsByType(
         "safe",
         startLat,
@@ -179,33 +239,26 @@ function buildRoutesFromPlaces(
         endLat,
         endLng,
       ),
-      dangerPoints: [
-        {
-          lat: startLat + (endLat - startLat) * 0.7,
-          lng: startLng + (endLng - startLng) * 0.7,
-          message: "야간에는 주변 시야를 확인해 주세요.",
-        },
-      ],
+      dangerPoints: [],
     },
   ];
+
+  // 🔥 옵션 반영
+  return baseRoutes.map((route) => applyOptionsToRoute(route, options));
 }
 
 export async function getRoutes({
   startPlace,
   endPlace,
+  options,
 }: GetRoutesParams): Promise<GetRoutesResponse> {
-  try {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        resolve({
-          routes: buildRoutesFromPlaces(startPlace, endPlace),
-        });
-      }, 300);
-    });
-  } catch (error) {
-    console.error("getRoutes error:", error);
-    throw new Error("경로를 불러오지 못했습니다.");
-  }
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      resolve({
+        routes: buildRoutesFromPlaces(startPlace, endPlace, options),
+      });
+    }, 300);
+  });
 }
 
 export async function startNavigation(

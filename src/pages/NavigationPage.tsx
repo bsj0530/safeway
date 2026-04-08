@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from "react-router";
 import MapView from "../components/map/MapView";
 import useVoiceGuide from "../hooks/useVoiceGuide";
 import type { PlaceItem } from "../types/place";
-import type { RouteItem } from "../types/route";
+import type { RiskLevel, RouteItem } from "../types/route";
 import {
   getDistanceMeters,
   getNearestPathIndex,
@@ -16,6 +16,24 @@ interface NavigationState {
   startPlace?: PlaceItem;
   endPlace?: PlaceItem;
   selectedRoute?: RouteItem;
+}
+
+function getRiskLevelText(level: RiskLevel) {
+  if (level === "low") return "낮음";
+  if (level === "medium") return "보통";
+  return "높음";
+}
+
+function getCrowdLevelText(level: RouteItem["crowdLevel"]) {
+  if (level === "low") return "여유";
+  if (level === "medium") return "보통";
+  return "혼잡";
+}
+
+function getScoreTone(score: number) {
+  if (score >= 85) return "bg-emerald-50 text-emerald-700";
+  if (score >= 70) return "bg-amber-50 text-amber-700";
+  return "bg-red-50 text-red-700";
 }
 
 export default function NavigationPage() {
@@ -168,7 +186,22 @@ export default function NavigationPage() {
   }, [currentPosition, absolutePath, arrived, speak, resetLastMessage]);
 
   if (!startPlace || !endPlace || !selectedRoute) {
-    return <div>경로 정보 없음</div>;
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 px-6">
+        <div className="rounded-2xl bg-white p-6 text-center shadow-sm">
+          <p className="text-base font-semibold text-slate-800">
+            경로 정보가 없습니다.
+          </p>
+          <button
+            type="button"
+            onClick={() => navigate("/")}
+            className="mt-4 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-medium text-white"
+          >
+            다시 경로 찾기
+          </button>
+        </div>
+      </div>
+    );
   }
 
   const currentIndex = currentPosition
@@ -241,6 +274,34 @@ export default function NavigationPage() {
             {voiceEnabled ? "음성 안내 ON" : "음성 안내 OFF"}
           </button>
         </div>
+
+        <div className="mt-3 flex flex-wrap gap-2">
+          <span
+            className={`rounded-full px-3 py-1 text-xs font-semibold ${getScoreTone(
+              selectedRoute.finalSafetyScore,
+            )}`}
+          >
+            최종 안전 {selectedRoute.finalSafetyScore}
+          </span>
+
+          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700">
+            혼잡도 {getCrowdLevelText(selectedRoute.crowdLevel)}
+          </span>
+
+          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700">
+            위험 {selectedRoute.riskCount}곳
+          </span>
+
+          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700">
+            사건 {selectedRoute.incidentCount}건
+          </span>
+
+          {selectedRoute.hasEvent && (
+            <span className="rounded-full bg-rose-50 px-3 py-1 text-xs text-rose-700">
+              행사 영향 있음
+            </span>
+          )}
+        </div>
       </div>
 
       {dangerMessage && (
@@ -270,7 +331,7 @@ export default function NavigationPage() {
         />
       </div>
 
-      <div className="flex-1 space-y-4 p-4">
+      <div className="flex-1 space-y-4 overflow-auto p-4">
         <div className="rounded-2xl bg-white p-4 shadow-sm">
           <p className="text-sm text-slate-500">다음 안내</p>
           <p className="mt-1 text-lg font-semibold text-slate-800">
@@ -280,6 +341,25 @@ export default function NavigationPage() {
             다음 목표 지점까지 {Math.round(nextDistance)}m
           </p>
         </div>
+
+        {selectedRoute.realtimeBadges.length > 0 && (
+          <div className="rounded-2xl bg-white p-4 shadow-sm">
+            <p className="text-sm text-slate-500">실시간 상태</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {selectedRoute.realtimeBadges.map((badge) => (
+                <span
+                  key={badge}
+                  className="rounded-full bg-blue-50 px-3 py-1 text-xs text-blue-700"
+                >
+                  {badge}
+                </span>
+              ))}
+            </div>
+            <p className="mt-3 text-sm text-slate-700">
+              {selectedRoute.realtimeSummary}
+            </p>
+          </div>
+        )}
 
         <div className="grid grid-cols-2 gap-3">
           <div className="rounded-2xl bg-white p-4 shadow-sm">
@@ -295,6 +375,48 @@ export default function NavigationPage() {
               {estimatedMinutes}분
             </p>
           </div>
+
+          <div className="rounded-2xl bg-white p-4 shadow-sm">
+            <p className="text-sm text-slate-500">실시간 위험도</p>
+            <p className="mt-1 text-xl font-bold text-slate-800">
+              {selectedRoute.realtimeRiskScore}
+            </p>
+          </div>
+
+          <div className="rounded-2xl bg-white p-4 shadow-sm">
+            <p className="text-sm text-slate-500">케어 적합도</p>
+            <p className="mt-1 text-xl font-bold text-slate-800">
+              {selectedRoute.careTargetFitScore}
+            </p>
+          </div>
+        </div>
+
+        <div className="rounded-2xl bg-white p-4 shadow-sm">
+          <p className="text-sm text-slate-500">세부 위험도</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700">
+              날씨 {getRiskLevelText(selectedRoute.weatherRiskLevel)}
+            </span>
+            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700">
+              조도 {getRiskLevelText(selectedRoute.lightingRiskLevel)}
+            </span>
+            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700">
+              경사 {getRiskLevelText(selectedRoute.slopeRiskLevel)}
+            </span>
+          </div>
+
+          {selectedRoute.risks.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {selectedRoute.risks.map((risk) => (
+                <span
+                  key={risk}
+                  className="rounded-full bg-amber-50 px-3 py-1 text-xs text-amber-700"
+                >
+                  {risk}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="rounded-2xl bg-white p-4 shadow-sm">
@@ -304,6 +426,9 @@ export default function NavigationPage() {
           </p>
           <p className="mt-1 text-sm text-slate-700">
             도착: {endPlace.placeName}
+          </p>
+          <p className="mt-1 text-sm text-slate-700">
+            선택 경로: {selectedRoute.title}
           </p>
         </div>
       </div>
